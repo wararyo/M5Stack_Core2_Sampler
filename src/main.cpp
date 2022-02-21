@@ -1,7 +1,7 @@
 #include <M5Core2.h>
 #include <driver/i2s.h>
 
-extern const unsigned char previewR[120264];
+extern const unsigned char previewR[396900];
 
 #define CONFIG_I2S_BCK_PIN 12
 #define CONFIG_I2S_LRCK_PIN 0
@@ -74,7 +74,7 @@ void SpeakInit(void)
 void DingDong(void)
 {
   size_t bytes_written = 0;
-  i2s_write(Speak_I2S_NUMBER, previewR, 120264, &bytes_written, portMAX_DELAY);
+  i2s_write(Speak_I2S_NUMBER, previewR, 396900, &bytes_written, portMAX_DELAY);
 }
 
 void IRAM_ATTR AudioLoop()
