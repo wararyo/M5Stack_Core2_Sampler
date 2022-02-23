@@ -198,6 +198,19 @@ void SpeakInit(void)
   InitI2SSpeakOrMic(MODE_SPK);
 }
 
+// 動作確認用機能のため、CH1のみに対応
+void HandleMidiMessage(uint8_t *message)
+{
+  if (message[0] == 0x90)
+  {
+    SendNoteOn(message[1], 50, 1);
+  }
+  else if (message[0] == 0x80)
+  {
+    SendNoteOff(message[1], 50, 1);
+  }
+}
+
 void setup()
 {
   M5.begin(true, true, true, true);
@@ -230,6 +243,28 @@ void setup()
 
 void loop()
 {
+  // シリアルポートから受信したMIDIを再生
+  static uint8_t message[3] = {0x00};
+  while (Serial.available() > 0)
+  {
+    uint8_t byte = Serial.read();
+    if(message[0] != 0x00) {
+      if(message[1] == 0x00) message[1] = byte;
+      else if(message[2] == 0x00) {
+        message[2] = byte;
+        HandleMidiMessage(message);
+        message[0] = 0x00;
+        message[1] = 0x00;
+        message[2] = 0x00;
+      }
+    }
+    else if (byte == 0x90 || byte == 0x80)
+    {
+      message[0] = byte;
+    }
+  }
+
+  // タッチで単音を再生
   static unsigned char noteNo = 60;
   static bool noteOn = true;
   TouchPoint_t pos = M5.Touch.getPressPoint();
@@ -245,6 +280,6 @@ void loop()
     noteOn = !noteOn;
     delay(500);
   }
-  else
-    delay(10);
+
+  delay(10);
 }
