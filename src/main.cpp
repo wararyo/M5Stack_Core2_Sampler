@@ -71,10 +71,18 @@ struct Sample piano = Sample{
 
 SamplePlayer players[MAX_SOUND] = {SamplePlayer()};
 
-void SendNoteOn(uint8_t pitch, uint8_t velocity, uint8_t channnel) {
+float PitchFromNoteNo(float noteNo, float root)
+{
+    float delta = noteNo - root;
+    float f = ((pow(2.0f, delta / 12.0f)));   /* no frequency so dont use * 440.0f */
+    return f;
+}
+
+void SendNoteOn(uint8_t noteNo, uint8_t velocity, uint8_t channnel) {
   for(uint8_t i = 0;i < MAX_SOUND;i++) {
     if(players[i].playing == false) {
-      players[i] = SamplePlayer(&piano, 1.0f, 1.0f);
+      float pitch = PitchFromNoteNo(noteNo, piano.root);
+      players[i] = SamplePlayer(&piano, pitch, velocity / 127.0f);
       return;
     }
   }
@@ -107,9 +115,18 @@ void AudioLoop(void *pvParameters)
         }
         else
         {
-          // 正弦波を生成
-          sampleDataU[n] += player->sample->sample[player->pos];
-          player->pos += 1;
+          // 波形を読み込む
+          float sample = player->sample->sample[player->pos];
+          sample *= player->volume;
+          sampleDataU[n] += sample;
+
+          // 次のサンプルへ移動
+          int32_t pitch_u = player->pitch;
+          player->pos_f += player->pitch - pitch_u; /* does not work great when pos_f is bigger */
+          player->pos += pitch_u;
+          int posI = player->pos_f;
+          player->pos += posI;
+          player->pos_f -= posI;
         }
       }
     }
@@ -174,7 +191,7 @@ void setup()
   M5.Lcd.printf("Sampler Test");
   M5.Lcd.setTextColor(BLACK);
   M5.Lcd.setCursor(10, 26);
-  M5.Lcd.printf("Touch to listen sin wave");
+  M5.Lcd.printf("Touch to play piano");
   SpeakInit();
   size_t bytes_written = 0;
   i2s_write(Speak_I2S_NUMBER, (const unsigned char *)piano_sample, 256000, &bytes_written, portMAX_DELAY);
@@ -195,11 +212,13 @@ void setup()
 
 void loop()
 {
+  static unsigned char noteNo = 60;
   TouchPoint_t pos = M5.Touch.getPressPoint();
   if (pos.y > 0)
   {
-    SendNoteOn(60,127,1);
-    delay(1000);
+    SendNoteOn(noteNo,80,1);
+    noteNo++;
+    delay(500);
   }
   else
     delay(10);
