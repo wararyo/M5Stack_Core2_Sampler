@@ -47,8 +47,9 @@ struct Sample
 
 struct SamplePlayer
 {
-  SamplePlayer(struct Sample *sample, uint8_t noteNo, float volume) : sample{sample}, noteNo{noteNo}, volume{volume} {}
-  SamplePlayer() : sample{nullptr}, noteNo{60}, volume{1.0f}, playing{false}, createdAt(micros()) {}
+  SamplePlayer(struct Sample *sample, uint8_t noteNo, float volume)
+    : sample{sample}, noteNo{noteNo}, volume{volume}, createdAt{micros()} {}
+  SamplePlayer() : sample{nullptr}, noteNo{60}, volume{1.0f}, playing{false}, createdAt{micros()} {}
   struct Sample *sample;
   uint8_t noteNo;
   float pitchBend = 0;
