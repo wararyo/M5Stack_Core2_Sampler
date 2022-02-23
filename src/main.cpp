@@ -48,16 +48,17 @@ struct Sample
 struct SamplePlayer
 {
   SamplePlayer(struct Sample *sample, uint8_t noteNo, float volume) : sample{sample}, noteNo{noteNo}, volume{volume} {}
-  SamplePlayer() : sample{nullptr}, noteNo{60}, volume{1.0f}, playing{false} {}
+  SamplePlayer() : sample{nullptr}, noteNo{60}, volume{1.0f}, playing{false}, createdAt(micros()) {}
   struct Sample *sample;
   uint8_t noteNo;
   float pitchBend = 0;
   float volume;
+  unsigned long createdAt = 0;
   uint32_t pos = 0;
   float pos_f = 0.0f;
   bool playing = true;
   bool released = false;
-  float adsr_gain = 0.0f;
+  float adsrGain = 0.0f;
   enum SampleAdsr adsr_state = SampleAdsr::attack;
 };
 
@@ -83,19 +84,22 @@ float PitchFromNoteNo(float noteNo, float root)
 }
 
 void SendNoteOn(uint8_t noteNo, uint8_t velocity, uint8_t channnel) {
+  uint8_t oldestPlayerId = 0;
   for(uint8_t i = 0;i < MAX_SOUND;i++) {
     if(players[i].playing == false) {
       players[i] = SamplePlayer(&piano, noteNo, velocity / 127.0f);
       return;
+    } else {
+      if(players[i].createdAt < players[oldestPlayerId].createdAt) oldestPlayerId = i;
     }
   }
-  // TODO: 全てのPlayerが再生中だった時には、最も昔に発音されたPlayerを停止する
+  // 全てのPlayerが再生中だった時には、最も昔に発音されたPlayerを停止する
+  players[oldestPlayerId] = SamplePlayer(&piano, noteNo, velocity / 127.0f);
 }
 void SendNoteOff(uint8_t noteNo,  uint8_t velocity, uint8_t channnel) {
   for(uint8_t i = 0;i < MAX_SOUND;i++) {
     if(players[i].playing == true && players[i].noteNo == noteNo) {
       players[i].released = true;
-      return;
     }
   }
 }
