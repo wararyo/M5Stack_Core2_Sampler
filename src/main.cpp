@@ -35,9 +35,10 @@ struct Sample
   const int16_t *sample;
   uint32_t length;
   uint8_t root;
-  uint32_t loop_start;
-  uint32_t loop_end;
+  uint32_t loopStart;
+  uint32_t loopEnd;
 
+  bool adsrEnabled;
   uint32_t attack;
   uint32_t decay;
   float sustain;
@@ -46,14 +47,16 @@ struct Sample
 
 struct SamplePlayer
 {
-  SamplePlayer(struct Sample *sample, float pitch, float volume) : sample{sample}, pitch{pitch}, volume{volume} {}
-  SamplePlayer() : sample{nullptr}, pitch{1.0f}, volume{1.0f}, playing{false} {}
+  SamplePlayer(struct Sample *sample, uint8_t noteNo, float volume) : sample{sample}, noteNo{noteNo}, volume{volume} {}
+  SamplePlayer() : sample{nullptr}, noteNo{60}, volume{1.0f}, playing{false} {}
   struct Sample *sample;
-  float pitch;
+  uint8_t noteNo;
+  float pitchBend = 0;
   float volume;
   uint32_t pos = 0;
   float pos_f = 0.0f;
   bool playing = true;
+  bool released = false;
   float adsr_gain = 0.0f;
   enum SampleAdsr adsr_state = SampleAdsr::attack;
 };
@@ -64,6 +67,7 @@ struct Sample piano = Sample{
     60,
     22971,
     23649,
+    true,
     0,
     132300,
     0.1f,
@@ -81,12 +85,19 @@ float PitchFromNoteNo(float noteNo, float root)
 void SendNoteOn(uint8_t noteNo, uint8_t velocity, uint8_t channnel) {
   for(uint8_t i = 0;i < MAX_SOUND;i++) {
     if(players[i].playing == false) {
-      float pitch = PitchFromNoteNo(noteNo, piano.root);
-      players[i] = SamplePlayer(&piano, pitch, velocity / 127.0f);
+      players[i] = SamplePlayer(&piano, noteNo, velocity / 127.0f);
       return;
     }
   }
   // TODO: 全てのPlayerが再生中だった時には、最も昔に発音されたPlayerを停止する
+}
+void SendNoteOff(uint8_t noteNo,  uint8_t velocity, uint8_t channnel) {
+  for(uint8_t i = 0;i < MAX_SOUND;i++) {
+    if(players[i].playing == true && players[i].noteNo == noteNo) {
+      players[i].released = true;
+      return;
+    }
+  }
 }
 
 void AudioLoop(void *pvParameters)
@@ -106,9 +117,12 @@ void AudioLoop(void *pvParameters)
     {
       SamplePlayer *player = &players[i];
       if(player->playing == false) continue;
+      Sample *sample = player->sample;
+      
+      float pitch = PitchFromNoteNo(player->noteNo, player->sample->root);
       for (int n = 0; n < SAMPLE_BUFFER_SIZE; n++)
       {
-        if (player->pos >= player->sample->length)
+        if (player->pos >= sample->length)
         {
           player->playing = false;
           break;
@@ -116,17 +130,21 @@ void AudioLoop(void *pvParameters)
         else
         {
           // 波形を読み込む
-          float sample = player->sample->sample[player->pos];
-          sample *= player->volume;
-          sampleDataU[n] += sample;
+          float val = sample->sample[player->pos];
+          val *= player->volume;
+          sampleDataU[n] += val;
 
           // 次のサンプルへ移動
-          int32_t pitch_u = player->pitch;
-          player->pos_f += player->pitch - pitch_u; /* does not work great when pos_f is bigger */
+          int32_t pitch_u = pitch;
+          player->pos_f += pitch - pitch_u;
           player->pos += pitch_u;
           int posI = player->pos_f;
           player->pos += posI;
           player->pos_f -= posI;
+
+          // ループポイントが設定されている場合はループする
+          if(sample->adsrEnabled && player->released == false && player->pos >= sample->loopEnd)
+            player->pos -= (sample->loopEnd - sample->loopStart);
         }
       }
     }
@@ -213,11 +231,18 @@ void setup()
 void loop()
 {
   static unsigned char noteNo = 60;
+  static bool noteOn = true;
   TouchPoint_t pos = M5.Touch.getPressPoint();
   if (pos.y > 0)
   {
-    SendNoteOn(noteNo,80,1);
-    noteNo++;
+    if (noteOn)
+      SendNoteOn(noteNo, 80, 1);
+    else
+    {
+      SendNoteOff(noteNo, 80, 1);
+      noteNo++;
+    }
+    noteOn = !noteOn;
     delay(500);
   }
   else
