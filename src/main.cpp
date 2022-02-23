@@ -16,9 +16,11 @@ extern const int16_t piano_sample[128000];
 
 #define SAMPLE_BUFFER_SIZE 64
 #define SAMPLE_RATE 44100
-constexpr uint64_t TIMER_INTERVAL = (uint64_t)(SAMPLE_BUFFER_SIZE * 1000000 / SAMPLE_RATE);
+constexpr uint64_t AUDIO_LOOP_INTERVAL = (uint64_t)(SAMPLE_BUFFER_SIZE * 1000000 / SAMPLE_RATE);// micro seconds
 
-hw_timer_t *audioProcessTimer = NULL;
+#define MAX_SOUND 8 // 最大同時発音数
+
+unsigned long nextAudioLoop = 0;
 
 enum SampleAdsr
 {
@@ -45,6 +47,7 @@ struct Sample
 struct SamplePlayer
 {
   SamplePlayer(struct Sample *sample, float pitch, float volume) : sample{sample}, pitch{pitch}, volume{volume} {}
+  SamplePlayer() : sample{nullptr}, pitch{1.0f}, volume{1.0f}, playing{false} {}
   struct Sample *sample;
   float pitch;
   float volume;
@@ -66,39 +69,54 @@ struct Sample piano = Sample{
     0.1f,
     13230};
 
-struct SamplePlayer samplePlayer = SamplePlayer{
-    &piano,
-    1.0f,
-    1.0f};
+SamplePlayer players[MAX_SOUND] = {SamplePlayer()};
 
-void IRAM_ATTR AudioLoop()
-{
-  int16_t sampleDataU[SAMPLE_BUFFER_SIZE];
-
-  if (samplePlayer.playing == false)
-    return;
-
-  // 波形を生成
-  for (int n = 0; n < SAMPLE_BUFFER_SIZE; n++)
-  {
-    if (samplePlayer.pos >= samplePlayer.sample->length)
-    {
-      samplePlayer.playing = false;
-      sampleDataU[n] = 0;
+void SendNoteOn(uint8_t pitch, uint8_t velocity, uint8_t channnel) {
+  for(uint8_t i = 0;i < MAX_SOUND;i++) {
+    if(players[i].playing == false) {
+      players[i] = SamplePlayer(&piano, 1.0f, 1.0f);
+      return;
     }
-    else
-    {
-      // 正弦波を生成
-      sampleDataU[n] = samplePlayer.sample->sample[samplePlayer.pos];
-      // sampleDataU[n] *= samplePlayer.volume;
-    }
-
-    samplePlayer.pos += 1;
   }
+  // TODO: 全てのPlayerが再生中だった時には、最も昔に発音されたPlayerを停止する
+}
 
-  static size_t bytes_written = 0;
-  i2s_write(Speak_I2S_NUMBER, (const unsigned char *)sampleDataU, 2 * SAMPLE_BUFFER_SIZE, &bytes_written, portMAX_DELAY);
-  printf("%d\n", bytes_written);
+void AudioLoop(void *pvParameters)
+{
+  while (true)
+  {
+    delay(1);
+    if( nextAudioLoop > micros() ) {
+      continue;
+    }
+    nextAudioLoop = micros() + AUDIO_LOOP_INTERVAL - 1000;
+
+    int16_t sampleDataU[SAMPLE_BUFFER_SIZE] = {0x0000};
+
+    // 波形を生成
+    for (uint8_t i = 0; i < MAX_SOUND; i++)
+    {
+      SamplePlayer *player = &players[i];
+      if(player->playing == false) continue;
+      for (int n = 0; n < SAMPLE_BUFFER_SIZE; n++)
+      {
+        if (player->pos >= player->sample->length)
+        {
+          player->playing = false;
+          break;
+        }
+        else
+        {
+          // 正弦波を生成
+          sampleDataU[n] += player->sample->sample[player->pos];
+          player->pos += 1;
+        }
+      }
+    }
+
+    static size_t bytes_written = 0;
+    i2s_write(Speak_I2S_NUMBER, (const unsigned char *)sampleDataU, 2 * SAMPLE_BUFFER_SIZE, &bytes_written, portMAX_DELAY);
+  }
 }
 
 bool InitI2SSpeakOrMic(int mode)
@@ -162,10 +180,17 @@ void setup()
   i2s_write(Speak_I2S_NUMBER, (const unsigned char *)piano_sample, 256000, &bytes_written, portMAX_DELAY);
   delay(100);
 
-  // audioProcessTimer = timerBegin(0, 80, true);
-  // timerAttachInterrupt(audioProcessTimer, &AudioLoop, true);
-  // timerAlarmWrite(audioProcessTimer, 1000000, true);
-  // timerAlarmEnable(audioProcessTimer);
+  // Core0でタスク起動
+  xTaskCreateUniversal(
+      AudioLoop,
+      "audioLoop",
+      8192,
+      NULL,
+      1,
+      NULL,
+      0);
+  // ウォッチドッグ停止
+  disableCore0WDT();
 }
 
 void loop()
@@ -173,7 +198,8 @@ void loop()
   TouchPoint_t pos = M5.Touch.getPressPoint();
   if (pos.y > 0)
   {
-    AudioLoop();
+    SendNoteOn(60,127,1);
+    delay(1000);
   }
   else
     delay(10);
