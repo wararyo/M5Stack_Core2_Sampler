@@ -19,7 +19,7 @@ extern const int16_t piano_sample[128000];
 #define SAMPLE_RATE 44100
 constexpr uint32_t AUDIO_LOOP_INTERVAL = (uint32_t)(SAMPLE_BUFFER_SIZE * 1000000 / SAMPLE_RATE);// micro seconds
 
-#define MAX_SOUND 16 // 最大同時発音数
+#define MAX_SOUND 12 // 最大同時発音数
 
 unsigned long nextAudioLoop = 0;
 uint32_t audioProcessTime = 0; // プロファイリング用 一回のオーディオ処理にかかる時間
@@ -290,7 +290,7 @@ void setup()
 
   static float revBuffer[REV_BUFF_SIZE];
   Reverb_Setup(revBuffer);
-  Reverb_SetLevel(0, 0.5f);
+  Reverb_SetLevel(0, 0.2f);
 
   // Core0でタスク起動
   xTaskCreateUniversal(
