@@ -41,10 +41,10 @@ struct Sample
   uint32_t loopEnd;
 
   bool adsrEnabled;
-  uint32_t attack;
-  uint32_t decay;
+  float attack;
+  float decay;
   float sustain;
-  uint32_t release;
+  float release;
 };
 
 struct SamplePlayer
@@ -62,7 +62,7 @@ struct SamplePlayer
   bool playing = true;
   bool released = false;
   float adsrGain = 0.0f;
-  enum SampleAdsr adsr_state = SampleAdsr::attack;
+  enum SampleAdsr adsrState = SampleAdsr::attack;
 };
 
 struct Sample piano = Sample{
@@ -72,18 +72,54 @@ struct Sample piano = Sample{
     24120,
     24288,
     true,
-    0,
-    132300,
+    1.0f,
+    0.998887f,
     0.1f,
-    13230};
+    0.988885f};
 
 SamplePlayer players[MAX_SOUND] = {SamplePlayer()};
 
-float PitchFromNoteNo(float noteNo, float root)
+inline float PitchFromNoteNo(float noteNo, float root)
 {
     float delta = noteNo - root;
     float f = ((pow(2.0f, delta / 12.0f)));
     return f;
+}
+
+inline float UpdateAdsr(SamplePlayer *player)
+{
+  Sample *sample = player->sample;
+  if(player->released) player->adsrState = release;
+
+  switch (player->adsrState)
+  {
+  case attack:
+    player->adsrGain += sample->attack;
+    if (player->adsrGain >= 1.0f)
+    {
+      player->adsrGain = 1.0f;
+      player->adsrState = decay;
+    }
+    break;
+  case decay:
+    player->adsrGain = (player->adsrGain - sample->sustain) * sample->decay + sample->sustain;
+    if ((player->adsrGain - sample->sustain) < 0.01f)
+    {
+      player->adsrState = sustain;
+      player->adsrGain = sample->sustain;
+    }
+    break;
+  case sustain:
+    break;
+  case release:
+    player->adsrGain *= sample->release;
+    if (player->adsrGain < 0.01f)
+    {
+      player->adsrGain = 0;
+      player->playing = false;
+    }
+    break;
+  }
 }
 
 void SendNoteOn(uint8_t noteNo, uint8_t velocity, uint8_t channnel) {
@@ -121,8 +157,11 @@ void AudioLoop(void *pvParameters)
       SamplePlayer *player = &players[i];
       if(player->playing == false) continue;
       Sample *sample = player->sample;
-      
+      if(sample->adsrEnabled) UpdateAdsr(player);
+      if(player->playing == false) continue;
+
       float pitch = PitchFromNoteNo(player->noteNo, player->sample->root);
+
       for (int n = 0; n < SAMPLE_BUFFER_SIZE; n++)
       {
         if (player->pos >= sample->length)
@@ -134,6 +173,7 @@ void AudioLoop(void *pvParameters)
         {
           // 波形を読み込む
           float val = sample->sample[player->pos];
+          if(sample->adsrEnabled) val *= player->adsrGain;
           val *= player->volume / 32767.0f;
           data[n] += val;
 
