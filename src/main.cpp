@@ -16,11 +16,12 @@ extern const int16_t piano_sample[128000];
 
 #define SAMPLE_BUFFER_SIZE 64
 #define SAMPLE_RATE 44100
-constexpr uint64_t AUDIO_LOOP_INTERVAL = (uint64_t)(SAMPLE_BUFFER_SIZE * 1000000 / SAMPLE_RATE);// micro seconds
+constexpr uint32_t AUDIO_LOOP_INTERVAL = (uint32_t)(SAMPLE_BUFFER_SIZE * 1000000 / SAMPLE_RATE);// micro seconds
 
-#define MAX_SOUND 8 // 最大同時発音数
+#define MAX_SOUND 16 // 最大同時発音数
 
 unsigned long nextAudioLoop = 0;
+uint32_t audioProcessTime = 0; // プロファイリング用 一回のオーディオ処理にかかる時間
 
 enum SampleAdsr
 {
@@ -109,13 +110,9 @@ void AudioLoop(void *pvParameters)
 {
   while (true)
   {
-    delay(1);
-    if( nextAudioLoop > micros() ) {
-      continue;
-    }
-    nextAudioLoop = micros() + AUDIO_LOOP_INTERVAL - 1000;
-
     int16_t sampleDataU[SAMPLE_BUFFER_SIZE] = {0x0000};
+
+    unsigned long startTime = micros();
 
     // 波形を生成
     for (uint8_t i = 0; i < MAX_SOUND; i++)
@@ -153,6 +150,15 @@ void AudioLoop(void *pvParameters)
         }
       }
     }
+
+    unsigned long endTime = micros();
+    audioProcessTime = endTime - startTime;
+
+    while( nextAudioLoop > micros() ) {
+      delayMicroseconds(100);
+    }
+    if(nextAudioLoop == 0) nextAudioLoop = micros() + AUDIO_LOOP_INTERVAL - 200;
+    else nextAudioLoop == micros() + AUDIO_LOOP_INTERVAL;
 
     static size_t bytes_written = 0;
     i2s_write(Speak_I2S_NUMBER, (const unsigned char *)sampleDataU, 2 * SAMPLE_BUFFER_SIZE, &bytes_written, portMAX_DELAY);
@@ -283,8 +289,14 @@ void loop()
       noteNo++;
     }
     noteOn = !noteOn;
+
+
     delay(500);
   }
 
-  delay(10);
+  // オーディオ負荷率を出力
+  M5.Lcd.fillRect(10,58,310,16,WHITE);
+  M5.Lcd.progressBar(10,58,240,16,uint8_t((float)audioProcessTime * 100 / AUDIO_LOOP_INTERVAL));
+
+  delay(30);
 }
