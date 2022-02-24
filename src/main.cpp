@@ -1,5 +1,6 @@
 #include <M5Core2.h>
 #include <driver/i2s.h>
+#include <ml_reverb.h>
 
 extern const int16_t piano_sample[128000];
 
@@ -81,7 +82,7 @@ SamplePlayer players[MAX_SOUND] = {SamplePlayer()};
 float PitchFromNoteNo(float noteNo, float root)
 {
     float delta = noteNo - root;
-    float f = ((pow(2.0f, delta / 12.0f)));   /* no frequency so dont use * 440.0f */
+    float f = ((pow(2.0f, delta / 12.0f)));
     return f;
 }
 
@@ -110,7 +111,7 @@ void AudioLoop(void *pvParameters)
 {
   while (true)
   {
-    int16_t sampleDataU[SAMPLE_BUFFER_SIZE] = {0x0000};
+    float data[SAMPLE_BUFFER_SIZE] = {0.0f};
 
     unsigned long startTime = micros();
 
@@ -133,8 +134,8 @@ void AudioLoop(void *pvParameters)
         {
           // 波形を読み込む
           float val = sample->sample[player->pos];
-          val *= player->volume;
-          sampleDataU[n] += val;
+          val *= player->volume / 32767.0f;
+          data[n] += val;
 
           // 次のサンプルへ移動
           int32_t pitch_u = pitch;
@@ -151,6 +152,14 @@ void AudioLoop(void *pvParameters)
       }
     }
 
+    Reverb_Process(data, SAMPLE_BUFFER_SIZE);
+
+    int16_t dataI[SAMPLE_BUFFER_SIZE];
+
+    for (uint8_t i = 0; i < SAMPLE_BUFFER_SIZE; i++) {
+      dataI[i] = int16_t(data[i] * 32767.0f);
+    }
+
     unsigned long endTime = micros();
     audioProcessTime = endTime - startTime;
 
@@ -161,7 +170,7 @@ void AudioLoop(void *pvParameters)
     else nextAudioLoop == micros() + AUDIO_LOOP_INTERVAL;
 
     static size_t bytes_written = 0;
-    i2s_write(Speak_I2S_NUMBER, (const unsigned char *)sampleDataU, 2 * SAMPLE_BUFFER_SIZE, &bytes_written, portMAX_DELAY);
+    i2s_write(Speak_I2S_NUMBER, (const unsigned char *)dataI, 2 * SAMPLE_BUFFER_SIZE, &bytes_written, portMAX_DELAY);
   }
 }
 
@@ -238,6 +247,10 @@ void setup()
   size_t bytes_written = 0;
   i2s_write(Speak_I2S_NUMBER, (const unsigned char *)piano_sample, 256000, &bytes_written, portMAX_DELAY);
   delay(100);
+
+  static float revBuffer[REV_BUFF_SIZE];
+  Reverb_Setup(revBuffer);
+  Reverb_SetLevel(0, 0.5f);
 
   // Core0でタスク起動
   xTaskCreateUniversal(
