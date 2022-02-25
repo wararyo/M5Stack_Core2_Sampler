@@ -1,4 +1,4 @@
-#include <M5Core2.h>
+#include <M5Unified.h>
 #include <driver/i2s.h>
 #include <ml_reverb.h>
 
@@ -243,15 +243,8 @@ bool InitI2SSpeakOrMic(int mode)
   tx_pin_config.data_out_num = CONFIG_I2S_DATA_PIN;
   tx_pin_config.data_in_num = CONFIG_I2S_DATA_IN_PIN;
   err += i2s_set_pin(Speak_I2S_NUMBER, &tx_pin_config);
-  // err += i2s_set_clk(Speak_I2S_NUMBER, SAMPLE_RATE, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
 
   return true;
-}
-
-void SpeakInit(void)
-{
-  M5.Axp.SetSpkEnable(true);
-  InitI2SSpeakOrMic(MODE_SPK);
 }
 
 // 動作確認用機能のため、CH1のみに対応
@@ -269,17 +262,26 @@ void HandleMidiMessage(uint8_t *message)
 
 void setup()
 {
-  M5.begin(true, true, true, true);
-  M5.Lcd.fillScreen(WHITE);
-  M5.Lcd.setTextColor(BLACK);
-  M5.Lcd.setTextSize(2);
-  M5.Lcd.setTextColor(RED);
-  M5.Lcd.setCursor(10, 10);
-  M5.Lcd.printf("Sampler Test");
-  M5.Lcd.setTextColor(BLACK);
-  M5.Lcd.setCursor(10, 26);
-  M5.Lcd.printf("Touch to play piano");
-  SpeakInit();
+  M5.begin();
+  M5.Display.startWrite();
+  M5.Display.fillScreen(WHITE);
+  M5.Display.setTextColor(BLACK);
+  M5.Display.setTextSize(2);
+  M5.Display.setTextColor(RED);
+  M5.Display.setCursor(10, 10);
+  M5.Display.printf("Sampler Test");
+  M5.Display.setTextColor(BLACK);
+  M5.Display.setCursor(10, 32);
+  M5.Display.printf("Input serial MIDI");
+  M5.Display.setCursor(10, 48);
+  M5.Display.printf("to play the piano.");
+  M5.Display.setCursor(10, 80);
+  M5.Display.printf("Audio load");
+  M5.Display.setCursor(64, 216);
+  M5.Display.printf("Do     Mi     So");
+  M5.Display.endWrite();
+  InitI2SSpeakOrMic(MODE_SPK);
+
   size_t bytes_written = 0;
   i2s_write(Speak_I2S_NUMBER, (const unsigned char *)piano_sample, 256000, &bytes_written, portMAX_DELAY);
   delay(100);
@@ -324,28 +326,34 @@ void loop()
     }
   }
 
-  // タッチで単音を再生
-  static unsigned char noteNo = 60;
-  static bool noteOn = true;
-  TouchPoint_t pos = M5.Touch.getPressPoint();
-  if (pos.y > 0)
-  {
-    if (noteOn)
-      SendNoteOn(noteNo, 80, 1);
-    else
-    {
-      SendNoteOff(noteNo, 80, 1);
-      noteNo++;
-    }
-    noteOn = !noteOn;
-
-
-    delay(500);
+  // 本体ボタンタッチで単音を再生
+  M5.update();
+  if(M5.BtnA.wasPressed()) {
+    SendNoteOn(60, 100, 1);
+  }
+  else if(M5.BtnA.wasReleased()) {
+    SendNoteOff(60, 100, 1);
+  }
+  if(M5.BtnB.wasPressed()) {
+    SendNoteOn(64, 100, 1);
+  }
+  else if(M5.BtnB.wasReleased()) {
+    SendNoteOff(64, 100, 1);
+  }
+    if(M5.BtnC.wasPressed()) {
+    SendNoteOn(67, 100, 1);
+  }
+  else if(M5.BtnC.wasReleased()) {
+    SendNoteOff(67, 100, 1);
   }
 
   // オーディオ負荷率を出力
-  M5.Lcd.fillRect(10,58,310,16,WHITE);
-  M5.Lcd.progressBar(10,58,240,16,uint8_t((float)audioProcessTime * 100 / AUDIO_LOOP_INTERVAL));
+  M5.Display.startWrite();
+  M5.Display.fillRect(10,96,310,16,WHITE);
+  M5.Display.drawRect(10,96,240,16,BLACK);
+  float audioLoad = (float)audioProcessTime / AUDIO_LOOP_INTERVAL;
+  M5.Display.fillRect(10,96,audioLoad * 240,16,BLUE);
+  M5.Display.endWrite();
 
   delay(30);
 }
