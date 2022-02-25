@@ -205,12 +205,6 @@ void AudioLoop(void *pvParameters)
     unsigned long endTime = micros();
     audioProcessTime = endTime - startTime;
 
-    while( nextAudioLoop > micros() ) {
-      delayMicroseconds(100);
-    }
-    if(nextAudioLoop == 0) nextAudioLoop = micros() + AUDIO_LOOP_INTERVAL - 200;
-    else nextAudioLoop == micros() + AUDIO_LOOP_INTERVAL;
-
     static size_t bytes_written = 0;
     i2s_write(Speak_I2S_NUMBER, (const unsigned char *)dataI, 2 * SAMPLE_BUFFER_SIZE, &bytes_written, portMAX_DELAY);
   }
@@ -228,8 +222,8 @@ bool InitI2SSpeakOrMic(int mode)
       .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
       .communication_format = I2S_COMM_FORMAT_I2S,
       .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-      .dma_buf_count = 2,
-      .dma_buf_len = 128,
+      .dma_buf_count = 8,
+      .dma_buf_len = 64,
   };
   if (mode == MODE_MIC)
   {
