@@ -21,6 +21,8 @@ constexpr uint32_t AUDIO_LOOP_INTERVAL = (uint32_t)(SAMPLE_BUFFER_SIZE * 1000000
 
 #define MAX_SOUND 12 // 最大同時発音数
 
+float globalVolume = 0.5f;
+
 unsigned long nextAudioLoop = 0;
 uint32_t audioProcessTime = 0; // プロファイリング用 一回のオーディオ処理にかかる時間
 
@@ -195,9 +197,9 @@ void AudioLoop(void *pvParameters)
     Reverb_Process(data, SAMPLE_BUFFER_SIZE);
 
     int16_t dataI[SAMPLE_BUFFER_SIZE];
-
+    const float multiplier = globalVolume * 32767.0f; // 32767 = int16_tがとりうる最大値
     for (uint8_t i = 0; i < SAMPLE_BUFFER_SIZE; i++) {
-      dataI[i] = int16_t(data[i] * 32767.0f);
+      dataI[i] = int16_t(data[i] * multiplier);
     }
 
     unsigned long endTime = micros();
@@ -263,11 +265,11 @@ void HandleMidiMessage(uint8_t *message)
 {
   if (message[0] == 0x90)
   {
-    SendNoteOn(message[1], 50, 1);
+    SendNoteOn(message[1], message[2], 1);
   }
   else if (message[0] == 0x80)
   {
-    SendNoteOff(message[1], 50, 1);
+    SendNoteOff(message[1], message[2], 1);
   }
 }
 
