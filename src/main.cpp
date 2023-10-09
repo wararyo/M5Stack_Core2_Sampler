@@ -88,7 +88,7 @@ inline float PitchFromNoteNo(float noteNo, float root)
     return f;
 }
 
-inline float UpdateAdsr(SamplePlayer *player)
+inline void UpdateAdsr(SamplePlayer *player)
 {
   Sample *sample = player->sample;
   if(player->released) player->adsrState = release;
