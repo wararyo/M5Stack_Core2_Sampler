@@ -21,7 +21,7 @@ constexpr uint32_t AUDIO_LOOP_INTERVAL = (uint32_t)(SAMPLE_BUFFER_SIZE * 1000000
 
 #define MAX_SOUND 12 // 最大同時発音数
 
-float globalVolume = 0.5f;
+float masterVolume = 0.5f;
 
 unsigned long nextAudioLoop = 0;
 uint32_t audioProcessTime = 0; // プロファイリング用 一回のオーディオ処理にかかる時間
@@ -176,7 +176,7 @@ void AudioLoop(void *pvParameters)
           // 波形を読み込む
           float val = sample->sample[player->pos];
           if(sample->adsrEnabled) val *= player->adsrGain;
-          val *= player->volume / 32767.0f;
+          val *= player->volume;
           data[n] += val;
 
           // 次のサンプルへ移動
@@ -197,9 +197,8 @@ void AudioLoop(void *pvParameters)
     Reverb_Process(data, SAMPLE_BUFFER_SIZE);
 
     int16_t dataI[SAMPLE_BUFFER_SIZE];
-    const float multiplier = globalVolume * 32767.0f; // 32767 = int16_tがとりうる最大値
     for (uint8_t i = 0; i < SAMPLE_BUFFER_SIZE; i++) {
-      dataI[i] = int16_t(data[i] * multiplier);
+      dataI[i] = int16_t(data[i] * masterVolume);
     }
 
     unsigned long endTime = micros();
